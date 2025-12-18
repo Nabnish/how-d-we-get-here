@@ -3,6 +3,17 @@ import numpy as np
 import pickle
 import hashlib
 import time
+import os
+import importlib.util
+import sys
+
+# Ensure console uses UTF-8 where supported (prevents UnicodeEncodeError on Windows)
+try:
+    # Python 3.7+: reconfigure stdout encoding to utf-8
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    # fallback: set PYTHONUTF8 env or run with -X utf8 if reconfigure not available
+    os.environ.setdefault("PYTHONUTF8", "1")
 
 # =====================================================
 # CONFIG
@@ -34,23 +45,18 @@ def local_mistral_answer(prompt: str) -> str:
     return llm(prompt)
 
 # =====================================================
-# STUB PUBMED CLIENT
+# PUBMED CLIENT (use pdfreader.py output)
 # =====================================================
-
-class PubMedAPI:
-    def __init__(self, email=None):
-        self.email = email
-
-    def search_and_fetch(self, query, max_results=20):
-        # Replace with real API calls if needed
-        return [
-            {
-                "pmid": "0000001",
-                "title": "Stub article for testing",
-                "journal": "Test Journal",
-                "full_text": "This is a short stub text used to test indexing and retrieval."
-            }
-        ]
+# Replace the local stub with the real PubMedAPI from Backend/pdfreader.py.
+try:
+    from Backend.pdfreader import PubMedAPI
+except Exception:
+    # Fallback: load pdfreader.py by path (works even if Backend isn't a package)
+    pdf_path = os.path.join(os.path.dirname(__file__), "pdfreader.py")
+    spec = importlib.util.spec_from_file_location("pdfreader", pdf_path)
+    pdfreader = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pdfreader)
+    PubMedAPI = getattr(pdfreader, "PubMedAPI")
 
 # =====================================================
 # DETERMINISTIC FALLBACK EMBEDDINGS
@@ -123,7 +129,8 @@ def build_pubmed_index(articles):
     with open(META_FILE, "wb") as f:
         pickle.dump({"texts": texts, "metas": metas}, f)
 
-    print(f"✅ Indexed {len(texts)} chunks")
+    # Use plain ASCII to avoid encoding issues on Windows consoles
+    print(f"Indexed {len(texts)} chunks")
 
 # =====================================================
 # SEARCH
@@ -150,12 +157,76 @@ def search_pubmed(query, k=5):
 # RAG ANSWER
 # =====================================================
 
+# --- New helpers to keep prompt under the model's context window ---
+# Rough token estimate: average characters per token ~= 4 (approx).
+# Use a safety multiplier to avoid exceeding the model window.
+TOKEN_CHAR_RATIO = 4.0
+SAFETY_MULTIPLIER = 1.15
+
+def estimate_tokens_by_chars(text: str) -> int:
+    return max(1, int((len(text) / TOKEN_CHAR_RATIO) * SAFETY_MULTIPLIER))
+
+# Model window and reserved space
+MAX_MODEL_CONTEXT_TOKENS = 512
+RESERVED_TOKENS_FOR_QUESTION_AND_ANSWER = 64
+# Be conservative on chunk length
+MAX_CHARS_PER_CHUNK = 180
+
+def build_context_for_query(retrieved_chunks, question: str):
+    # tokens available for context after reserving space for QA
+    available_for_context = MAX_MODEL_CONTEXT_TOKENS - RESERVED_TOKENS_FOR_QUESTION_AND_ANSWER
+    q_tokens = estimate_tokens_by_chars(question)
+    overhead_margin = 16
+    remaining = max(0, available_for_context - q_tokens - overhead_margin)
+
+    # prepare parts (title + truncated text)
+    parts = []
+    for r in retrieved_chunks:
+        title_meta = f"{r['meta'].get('title','')} (PMID: {r['meta'].get('pmid','')})\n"
+        text = r["text"][:MAX_CHARS_PER_CHUNK].strip()
+        chunk_text = title_meta + text
+        toks = estimate_tokens_by_chars(chunk_text)
+        parts.append({"text": chunk_text, "tokens": toks})
+
+    # Greedy include until remaining, but allow trimming if still over budget
+    included = []
+    used = 0
+    for p in parts:
+        if used + p["tokens"] > remaining:
+            break
+        included.append(p["text"])
+        used += p["tokens"]
+
+    # If nothing fits, include a very small single chunk
+    if not included and parts:
+        single = parts[0]["text"][: int(MAX_CHARS_PER_CHUNK / 2)]
+        included = [single]
+        used = estimate_tokens_by_chars(single)
+
+    # Final enforcement: if estimate still exceeds available, iteratively trim
+    def current_context_text(lst):
+        return "\n\n---\n\n".join(lst)
+
+    # If still too large, drop last chunks until fits
+    context_list = included.copy()
+    est = estimate_tokens_by_chars(current_context_text(context_list))
+    while est > remaining and len(context_list) > 1:
+        context_list.pop()  # drop least relevant (last)
+        est = estimate_tokens_by_chars(current_context_text(context_list))
+
+    # If only one chunk and still too big, truncate it further
+    if est > remaining and context_list:
+        max_chars = max(50, int((remaining / estimate_tokens_by_chars(context_list[0])) * len(context_list[0]) * 0.9))
+        context_list[0] = context_list[0][:max_chars]
+        est = estimate_tokens_by_chars(current_context_text(context_list))
+
+    context = current_context_text(context_list)
+    return context
+
+# Replace answer_with_pubmed with token-safe prompt builder
 def answer_with_pubmed(query):
-    retrieved = search_pubmed(query)
-    context = "\n\n---\n\n".join(
-        f"{r['meta']['title']} (PMID: {r['meta']['pmid']})\n{r['text']}"
-        for r in retrieved
-    )
+    retrieved = search_pubmed(query, k=10)  # retrieve up to 10 but we will limit by token budget
+    context = build_context_for_query(retrieved, question=query)
 
     prompt = f"""
 You are a medical research assistant.
