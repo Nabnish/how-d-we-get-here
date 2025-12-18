@@ -1,167 +1,195 @@
-from openai import OpenAI
 import os
 import glob
-import faiss
 import pickle
-import math
+import faiss
+import numpy as np
+from openai import OpenAI
 
-client = OpenAI()
+# =========================
+# Configuration
+# =========================
 
 EMBED_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-5.2-mini"
+
 DOCS_DIR = "docs"
 INDEX_FILE = "faiss.index"
 META_FILE = "faiss_meta.pkl"
+
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
+BATCH_SIZE = 64
+TOP_K = 4
 
-# Helper: simple chunker
+client = OpenAI()
+
+# =========================
+# Chunking
+# =========================
+
 def chunk_text(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
-    start = 0
     chunks = []
-    L = len(text)
-    while start < L:
-        end = start + chunk_size
-        chunk = text[start:end]
-        chunks.append(chunk)
-        start = max(start + chunk_size - overlap, end)
+    start = 0
+    length = len(text)
+
+    while start < length:
+        end = min(start + chunk_size, length)
+        chunks.append(text[start:end])
+        start += chunk_size - overlap
+
     return chunks
 
-# Build or load index
+# =========================
+# Build FAISS Index
+# =========================
+
 def build_index():
     docs = []
-    metadatas = []
-    for path in glob.glob(os.path.join(DOCS_DIR, "*.txt")):
+    metas = []
+
+    paths = glob.glob(os.path.join(DOCS_DIR, "*.txt"))
+    if not paths:
+        raise ValueError("No .txt files found in docs/ directory.")
+
+    for path in paths:
         with open(path, "r", encoding="utf-8") as f:
             text = f.read()
+
         for i, chunk in enumerate(chunk_text(text)):
             docs.append(chunk)
-            metadatas.append({"source": os.path.basename(path), "chunk": i})
+            metas.append({
+                "source": os.path.basename(path),
+                "chunk": i
+            })
 
-    # get embeddings in batches
-    batch_size = 64
+    # Generate embeddings in batches
     vectors = []
-    for i in range(0, len(docs), batch_size):
-        batch = docs[i : i + batch_size]
-        resp = client.embeddings.create(model=EMBED_MODEL, input=batch)
-        batch_vecs = [r.embedding for r in resp.data]
-        vectors.extend(batch_vecs)
+    for i in range(0, len(docs), BATCH_SIZE):
+        batch = docs[i:i + BATCH_SIZE]
+        resp = client.embeddings.create(
+            model=EMBED_MODEL,
+            input=batch
+        )
+        vectors.extend([r.embedding for r in resp.data])
 
-    dim = len(vectors[0])
-    index = faiss.IndexFlatL2(dim)
-    index.add(np.array(vectors, dtype="float32"))
-    # persist
+    if not vectors:
+        raise ValueError("No embeddings were created.")
+
+    vectors = np.array(vectors, dtype="float32")
+
+    # Normalize for cosine similarity
+    faiss.normalize_L2(vectors)
+
+    dim = vectors.shape[1]
+    index = faiss.IndexFlatIP(dim)
+    index.add(vectors)
+
+    # Persist index and metadata
     faiss.write_index(index, INDEX_FILE)
     with open(META_FILE, "wb") as f:
-        pickle.dump({"docs": docs, "metas": metadatas}, f)
-    print(f"Built index with {len(docs)} passages")
-    return index, docs, metadatas
+        pickle.dump({"docs": docs, "metas": metas}, f)
 
-# Load index
+    print(f"✅ Built FAISS index with {len(docs)} chunks")
+    return index, docs, metas
+
+# =========================
+# Load or Build Index
+# =========================
+
 def load_index():
     if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
         return build_index()
+
     index = faiss.read_index(INDEX_FILE)
     with open(META_FILE, "rb") as f:
         meta = pickle.load(f)
-    return index, meta["docs"], meta["metas"]
 
-import numpy as np
+    return index, meta["docs"], meta["metas"]
 
 index, docs, metas = load_index()
 
-# Retrieval + generation
-def retrieve(query, k=4):
-    q_emb = client.embeddings.create(model=EMBED_MODEL, input=query).data[0].embedding
-    D, I = index.search(np.array([q_emb], dtype="float32"), k)
+# =========================
+# Retrieval
+# =========================
+
+def retrieve(query, k=TOP_K):
+    resp = client.embeddings.create(
+        model=EMBED_MODEL,
+        input=query
+    )
+    q_emb = np.array([resp.data[0].embedding], dtype="float32")
+    faiss.normalize_L2(q_emb)
+
+    scores, indices = index.search(q_emb, k)
+
     results = []
-    for idx in I[0]:
-        results.append({"text": docs[idx], "meta": metas[idx]})
+    for idx in indices[0]:
+        results.append({
+            "text": docs[idx],
+            "meta": metas[idx]
+        })
+
     return results
 
+# =========================
+# Prompt Construction
+# =========================
+
 def create_prompt(query, retrieved):
-    ctx = "\n\n---\n\n".join([f"Source: {r['meta']['source']} (chunk {r['meta']['chunk']})\n{r['text']}" for r in retrieved])
-    prompt = (
-        "You are a helpful assistant. Use the provided context to answer the user.\n\n"
-        "Context:\n" + ctx + "\n\n"
-        f"User question: {query}\n\n"
-        "Answer concisely and cite sources by filename when useful."
+    context = "\n\n---\n\n".join(
+        f"Source: {r['meta']['source']} (chunk {r['meta']['chunk']})\n{r['text']}"
+        for r in retrieved
     )
-    return prompt
+
+    return f"""
+You are a knowledgeable assistant.
+Answer ONLY using the provided context.
+If the answer is not present, say "I don't know."
+
+Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+""".strip()
+
+# =========================
+# Answer Generation
+# =========================
 
 def answer(query):
-    retrieved = retrieve(query, k=4)
+    retrieved = retrieve(query)
     prompt = create_prompt(query, retrieved)
-    resp = client.responses.create(model=LLM_MODEL, input=prompt, max_tokens=600)
-    # responses API returns a content structure; adjust if your client variant differs
-    text = ""
-    # try to get text content
-    if hasattr(resp, "output") and isinstance(resp.output, list):
-        for item in resp.output:
-            if isinstance(item, dict) and "content" in item:
-                for c in item["content"]:
-                    if c.get("type") == "output_text":
-                        text += c.get("text", "")
-    else:
-        # fallback to top-level text
-        text = getattr(resp, "text", "") or resp.output_text if hasattr(resp, "output_text") else ""
-    return text.strip()
+
+    resp = client.responses.create(
+        model=LLM_MODEL,
+        input=prompt,
+        max_output_tokens=600
+    )
+
+    # Extract text from Responses API
+    output_text = ""
+    for item in resp.output:
+        for block in item.get("content", []):
+            if block.get("type") == "output_text":
+                output_text += block.get("text", "")
+
+    return output_text.strip()
+
+# =========================
+# Interactive CLI
+# =========================
 
 if __name__ == "__main__":
-    # Quick interactive loop
-    print("RAG demo. Make sure you have text files in the 'docs' folder.")
+    print("📚 RAG system ready. Ask questions about your documents.")
+    print("Type 'exit' to quit.")
+
     while True:
-        q = input("\nEnter question (or 'exit'): ").strip()
-        if q.lower() in ("exit", "quit"):
+        q = input("\n> ").strip()
+        if q.lower() in {"exit", "quit"}:
             break
-        ans = answer(q)
-        print("\nAnswer:\n", ans)
 
-
-
-import json
-import time
-
-def write_training_jsonl(pairs, path="training_data.jsonl"):
-    # pairs: list of (prompt, completion)
-    with open(path, "w", encoding="utf-8") as f:
-        for prompt, completion in pairs:
-            # ensure completion starts with a space/newline and ends with an end token if desired
-            obj = {"prompt": prompt, "completion": completion}
-            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    return path
-
-def upload_and_start_finetune(training_file_path, base_model="gpt-5.2-mini"):
-    # upload file
-    with open(training_file_path, "rb") as fh:
-        uploaded = client.files.create(file=fh, purpose="fine-tune")
-    print("Uploaded file id:", uploaded.id)
-
-    # start fine-tune
-    ft_job = client.fine_tunes.create(training_file=uploaded.id, model=base_model)
-    job_id = getattr(ft_job, "id", None) or ft_job.get("id")
-    print("Started fine-tune job id:", job_id)
-    return job_id
-
-def poll_finetune(job_id, interval=10):
-    print("Polling fine-tune status...")
-    while True:
-        job = client.fine_tunes.get(id=job_id)
-        status = getattr(job, "status", None) or job.get("status")
-        print("status:", status)
-        if status in ("succeeded", "failed", "cancelled"):
-            print("Final job info:", job)
-            return job
-        time.sleep(interval)
-
-# Example usage:
-# pairs = [
-#   ("Explain what RAG is.\n\n###\n\n", "RAG (Retrieval-Augmented Generation) is... END"),
-#   ("Q: How to install faiss on Windows?\n\n###\n\n", "A: ... END")
-# ]
-# path = write_training_jsonl(pairs)
-# job_id = upload_and_start_finetune(path, base_model="gpt-5.2-mini")
-# final = poll_finetune(job_id)
-# After success, use the returned fine-tuned model name to create responses (it may be in final.result or final.fine_tuned_model)
-# ...existing code... ans)
-
+        print("\nAnswer:\n")
+        print(answer(q))
