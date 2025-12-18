@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from openai import OpenAI
 import os
+import requests
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -10,8 +10,72 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)  # Enable CORS for frontend
 
-# Initialize OpenAI client
-client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+# Configuration - Choose your method: 'ollama' or 'mistral_api'
+LLM_METHOD = os.getenv('LLM_METHOD', 'ollama')  # Default to Ollama
+
+# Ollama configuration
+OLLAMA_BASE_URL = os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
+OLLAMA_MODEL = os.getenv('OLLAMA_MODEL', 'mistral:7b')
+
+# Mistral AI API configuration (alternative)
+MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY', '')
+MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions'
+
+def chat_with_ollama(user_message, system_message):
+    """Use Ollama for local Mistral 7B inference"""
+    try:
+        url = f"{OLLAMA_BASE_URL}/api/chat"
+        payload = {
+            "model": OLLAMA_MODEL,
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+    ],
+    "stream": False,
+    "options": {
+        "temperature": 0.7,
+        "num_predict": 500
+    }
+}
+
+        
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+        
+        return data.get('message', {}).get('content', 'No response generated')
+    
+    except Exception as e:
+        print(f"Ollama error: {str(e)}")
+        raise
+
+def chat_with_mistral_api(user_message, system_message):
+    """Use Mistral AI API (cloud-based)"""
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {MISTRAL_API_KEY}"
+        }
+        
+        payload = {
+            "model": "mistral-7b-instruct",  # or "mistral-tiny", "mistral-small", etc.
+            "messages": [
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_message}
+            ],
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        response = requests.post(MISTRAL_API_URL, json=payload, headers=headers, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+        
+        return data.get('choices', [{}])[0].get('message', {}).get('content', 'No response generated')
+    
+    except Exception as e:
+        print(f"Mistral API error: {str(e)}")
+        raise
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
@@ -22,24 +86,17 @@ def chat():
         if not user_message:
             return jsonify({'error': 'Message is required'}), 400
         
-        # Call OpenAI API
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # You can change this to gpt-4 or other models
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a helpful medical research assistant. You provide accurate, evidence-based information about medical topics, treatments, and research. Always cite sources when possible and remind users to consult healthcare professionals for medical advice."
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ],
-            max_tokens=500,
-            temperature=0.7
-        )
+        system_message = "You are a helpful medical research assistant. You provide accurate, evidence-based information about medical topics, treatments, and research. Always cite sources when possible and remind users to consult healthcare professionals for medical advice."
         
-        assistant_message = response.choices[0].message.content
+        # Choose LLM method
+        if LLM_METHOD == 'ollama':
+            assistant_message = chat_with_ollama(user_message, system_message)
+        elif LLM_METHOD == 'mistral_api':
+            if not MISTRAL_API_KEY:
+                return jsonify({'error': 'MISTRAL_API_KEY not configured'}), 500
+            assistant_message = chat_with_mistral_api(user_message, system_message)
+        else:
+            return jsonify({'error': f'Unknown LLM_METHOD: {LLM_METHOD}'}), 500
         
         return jsonify({
             'response': assistant_message
@@ -47,12 +104,11 @@ def chat():
     
     except Exception as e:
         print(f"Error: {str(e)}")
-        return jsonify({'error': 'An error occurred processing your request'}), 500
+        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
 @app.route('/api/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'ok'})
+    return jsonify({'status': 'ok', 'llm_method': LLM_METHOD})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0')
-

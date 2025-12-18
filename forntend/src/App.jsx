@@ -53,6 +53,7 @@ function App() {
   const handleClear = () => {
     setMessages([])
   }
+  
 
   return (
     <div className="app-container">
