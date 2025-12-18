@@ -7,13 +7,12 @@ import math
 
 client = OpenAI()
 
-# CONFIG
 EMBED_MODEL = "text-embedding-3-small"
-LLM_MODEL = "gpt-4o-mini"   # example; pick available model in your account
+LLM_MODEL = "gpt-5.2-mini"
 DOCS_DIR = "docs"
 INDEX_FILE = "faiss.index"
 META_FILE = "faiss_meta.pkl"
-CHUNK_SIZE = 800   # characters per chunk
+CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
 
 # Helper: simple chunker
@@ -117,4 +116,52 @@ if __name__ == "__main__":
             break
         ans = answer(q)
         print("\nAnswer:\n", ans)
-# ...existing code...
+
+
+
+import json
+import time
+
+def write_training_jsonl(pairs, path="training_data.jsonl"):
+    # pairs: list of (prompt, completion)
+    with open(path, "w", encoding="utf-8") as f:
+        for prompt, completion in pairs:
+            # ensure completion starts with a space/newline and ends with an end token if desired
+            obj = {"prompt": prompt, "completion": completion}
+            f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+    return path
+
+def upload_and_start_finetune(training_file_path, base_model="gpt-5.2-mini"):
+    # upload file
+    with open(training_file_path, "rb") as fh:
+        uploaded = client.files.create(file=fh, purpose="fine-tune")
+    print("Uploaded file id:", uploaded.id)
+
+    # start fine-tune
+    ft_job = client.fine_tunes.create(training_file=uploaded.id, model=base_model)
+    job_id = getattr(ft_job, "id", None) or ft_job.get("id")
+    print("Started fine-tune job id:", job_id)
+    return job_id
+
+def poll_finetune(job_id, interval=10):
+    print("Polling fine-tune status...")
+    while True:
+        job = client.fine_tunes.get(id=job_id)
+        status = getattr(job, "status", None) or job.get("status")
+        print("status:", status)
+        if status in ("succeeded", "failed", "cancelled"):
+            print("Final job info:", job)
+            return job
+        time.sleep(interval)
+
+# Example usage:
+# pairs = [
+#   ("Explain what RAG is.\n\n###\n\n", "RAG (Retrieval-Augmented Generation) is... END"),
+#   ("Q: How to install faiss on Windows?\n\n###\n\n", "A: ... END")
+# ]
+# path = write_training_jsonl(pairs)
+# job_id = upload_and_start_finetune(path, base_model="gpt-5.2-mini")
+# final = poll_finetune(job_id)
+# After success, use the returned fine-tuned model name to create responses (it may be in final.result or final.fine_tuned_model)
+# ...existing code... ans)
+
