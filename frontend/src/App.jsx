@@ -19,143 +19,131 @@ function App() {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
-    const userMessage = { role: 'user', content: input }
-    setMessages(prev => [...prev, userMessage])
+    setMessages(prev => [...prev, { role: 'user', content: input }])
     setInput('')
     setIsLoading(true)
 
     try {
       const response = await fetch('http://localhost:5000/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ message: input }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: input })
       })
-
-      if (!response.ok) {
-        throw new Error('Failed to get response')
-      }
 
       const data = await response.json()
       setMessages(prev => [...prev, { role: 'assistant', content: data.response }])
-    } catch (error) {
-      console.error('Error:', error)
-      setMessages(prev => [...prev, { 
-        role: 'assistant', 
-        content: 'Sorry, I encountered an error. Please make sure the backend server is running.' 
-      }])
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Backend error. Check Flask server.' }
+      ])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleClear = () => {
-    setMessages([])
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setIsLoading(true)
+
+    const formData = new FormData()
+    formData.append('file', file)
+
+    try {
+      const res = await fetch('http://localhost:5000/api/upload-pdf', {
+        method: 'POST',
+        body: formData
+      })
+
+      const data = await res.json()
+
+      const explainRes = await fetch('http://localhost:5000/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Explain this medical report in simple language:\n\n${data.text}`
+        })
+      })
+
+      const explainData = await explainRes.json()
+
+      setMessages(prev => [
+        ...prev,
+        { role: 'user', content: `Uploaded: ${file.name}` },
+        { role: 'assistant', content: explainData.response }
+      ])
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Error processing PDF.' }
+      ])
+    } finally {
+      setIsLoading(false)
+    }
   }
-  
 
   return (
     <div className="app-container">
       <header className="app-header">
-        <div className="header-content">
-          <h1 className="app-title">
-            <span className="title-icon">🤖</span>
-            Medical Records LLM Assistant
-          </h1>
-          <p className="app-subtitle">Ask questions about medical research and get intelligent answers</p>
-        </div>
-        {messages.length > 0 && (
-          <button className="clear-button" onClick={handleClear}>
-            Clear Chat
-          </button>
-        )}
+        <h1 className="app-title">🤖 Medical Records LLM</h1>
       </header>
 
       <main className="chat-container">
-        {messages.length === 0 ? (
-          <div className="welcome-screen">
-            <div className="welcome-content">
-              <div className="welcome-icon">💬</div>
-              <h2>Welcome to Medical Records LLM</h2>
-              <p>Start a conversation by asking a question about medical research, treatments, or any health-related topic.</p>
-              <div className="example-questions">
-                <p className="examples-title">Try asking:</p>
-                <div className="example-chips">
-                  <button 
-                    className="example-chip"
-                    onClick={() => setInput("What are the latest treatments for diabetes?")}
-                  >
-                    Latest diabetes treatments
-                  </button>
-                  <button 
-                    className="example-chip"
-                    onClick={() => setInput("Explain the symptoms of COVID-19")}
-                  >
-                    COVID-19 symptoms
-                  </button>
-                  <button 
-                    className="example-chip"
-                    onClick={() => setInput("What is immunotherapy?")}
-                  >
-                    What is immunotherapy?
-                  </button>
-                  <button 
-                    className="example-chip"
-                    onClick={() => setInput("Recent advances in cancer research")}
-                  >
-                    Cancer research advances
-                  </button>
-                </div>
-              </div>
+        <div className="messages-list">
+          {messages.map((msg, i) => (
+            <div key={i} className={`message ${msg.role}`}>
+              <div className="message-avatar">{msg.role === 'user' ? '👤' : '🤖'}</div>
+              <div className="message-text">{msg.content}</div>
             </div>
-          </div>
-        ) : (
-          <div className="messages-list">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`message ${msg.role}`}>
-                <div className="message-avatar">
-                  {msg.role === 'user' ? '👤' : '🤖'}
-                </div>
-                <div className="message-content">
-                  <div className="message-text">{msg.content}</div>
-                </div>
-              </div>
-            ))}
-            {isLoading && (
-              <div className="message assistant">
-                <div className="message-avatar">🤖</div>
-                <div className="message-content">
-                  <div className="loading-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        )}
+          ))}
+
+          {isLoading && (
+            <div className="message assistant">
+              <div className="message-avatar">🤖</div>
+              <div className="message-text">Thinking…</div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
       </main>
 
       <footer className="input-container">
         <form onSubmit={handleSend} className="input-form">
+
+          {/* PDF Upload */}
+          <label className="upload-pill">
+            📄
+            <input
+              type="file"
+              accept=".pdf"
+              hidden
+              disabled={isLoading}
+              onChange={handleFileUpload}
+            />
+          </label>
+
+          {/* Chat Input */}
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about medical research..."
+            placeholder="Ask or upload a medical report…"
             className="message-input"
             disabled={isLoading}
           />
-          <button 
-            type="submit" 
+
+          {/* Send */}
+          <button
+            type="submit"
             className="send-button"
             disabled={isLoading || !input.trim()}
           >
-            {isLoading ? '⏳' : '➤'}
+            ➤
           </button>
+
         </form>
       </footer>
     </div>
