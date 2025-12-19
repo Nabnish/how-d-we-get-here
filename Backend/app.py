@@ -58,11 +58,14 @@ def chat_with_ollama(user_message: str, system_message: str) -> str:
         "stream": False
     }
 
-    response = requests.post(url, json=payload, timeout=120)
-    response.raise_for_status()
-    data = response.json()
-
-    return data.get("message", {}).get("content", "")
+    try:
+        response = requests.post(url, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+        return data.get("message", {}).get("content", "")
+    except requests.RequestException as e:
+        # Raise a runtime error so callers return a useful 500 message
+        raise RuntimeError(f"Ollama request failed: {e}")
 
 
 def chat_with_mistral_api(user_message: str, system_message: str) -> str:
@@ -91,6 +94,28 @@ def chat_with_mistral_api(user_message: str, system_message: str) -> str:
     data = response.json()
 
     return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+
+def is_ollama_available(timeout: int = 5) -> (bool, str):
+    """Check if Ollama service is reachable and responsive."""
+    try:
+        resp = requests.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=timeout)
+        resp.raise_for_status()
+        return True, "Ollama reachable"
+    except requests.RequestException as e:
+        return False, str(e)
+
+
+@app.route("/api/llm/status", methods=["GET"])
+def llm_status():
+    """Return LLM readiness info (useful for frontend/health checks)."""
+    if LLM_METHOD == "ollama":
+        ok, info = is_ollama_available()
+        return jsonify({"method": "ollama", "ready": ok, "details": info})
+    elif LLM_METHOD == "mistral_api":
+        return jsonify({"method": "mistral_api", "ready": bool(MISTRAL_API_KEY)})
+    else:
+        return jsonify({"method": LLM_METHOD, "ready": False}), 400
 
 
 # ===============================
@@ -199,9 +224,16 @@ def query_documents():
 
 @app.route("/api/health", methods=["GET"])
 def health():
+    llm_info = {"method": LLM_METHOD}
+    if LLM_METHOD == "ollama":
+        ok, info = is_ollama_available()
+        llm_info.update({"ready": ok, "details": info})
+    elif LLM_METHOD == "mistral_api":
+        llm_info.update({"ready": bool(MISTRAL_API_KEY), "api_key_set": bool(MISTRAL_API_KEY)})
+
     return jsonify({
         "status": "ok",
-        "llm_method": LLM_METHOD
+        "llm": llm_info
     })
 
 

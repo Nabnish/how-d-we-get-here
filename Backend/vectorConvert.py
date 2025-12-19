@@ -29,26 +29,37 @@ BATCH_SIZE = 64  # Increased for better GPU utilization
 EMBED_DIM = 384  # Reduced from 1536 (sentence-transformers default)
 
 # =====================================================
-# LLM: Local Mistral 7B (ctransformers)
+# LLM: Local Mistral 7B (ctransformers) - robust imports
 # =====================================================
 
-from ctransformers import AutoModelForCausalLM
-from sentence_transformers import SentenceTransformer
+_llm_load_error = None
+_embed_load_error = None
+llm = None
+embedding_model = None
 
-# Load LLM with CPU inference (gpu_layers=0 means CPU only)
-# Using smaller, faster quantized model for better performance
-llm = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/Mistral-7B-Instruct-v0.1-GGUF",
-    model_file="mistral-7b-instruct-v0.1.Q3_K_S.gguf",
-    model_type="mistral",
-    gpu_layers=0  # CPU-only mode (set to >0 only if CUDA is installed)
-)
+try:
+    from ctransformers import AutoModelForCausalLM
+    llm = AutoModelForCausalLM.from_pretrained(
+        "TheBloke/Mistral-7B-Instruct-v0.1-GGUF",
+        model_file="mistral-7b-instruct-v0.1.Q3_K_S.gguf",
+        model_type="mistral",
+        gpu_layers=0  # CPU-only mode (set to >0 only if CUDA is installed)
+    )
+except Exception as e:
+    _llm_load_error = str(e)
 
-# Fast embedding model (33MB, 384-dim vectors - much faster than 1536-dim)
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+try:
+    from sentence_transformers import SentenceTransformer
+    embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+except Exception as e:
+    _embed_load_error = str(e)
+
 
 def local_mistral_answer(prompt: str) -> str:
+    if llm is None:
+        raise RuntimeError(f"LLM not available: {_llm_load_error or 'missing ctransformers or model file'}")
     return llm(prompt, max_new_tokens=256, temperature=0.7)  # Limit tokens for faster responses
+
 
 # No PubMed dependency needed for file-based RAG
 
@@ -57,8 +68,40 @@ def local_mistral_answer(prompt: str) -> str:
 # =====================================================
 
 def get_embeddings(inputs):
-    """Use fast sentence-transformers for embeddings (GPU-accelerated)"""
-    vecs = embedding_model.encode(inputs, show_progress_bar=False, batch_size=64)
+    """Get embeddings for a list of texts.
+
+    Preferred: use the SentenceTransformer model when available.
+    Fallback: deterministic, hashing-based vectors (lower quality) so the app can run without heavy packages.
+    """
+    if embedding_model is not None:
+        vecs = embedding_model.encode(inputs, show_progress_bar=False, batch_size=64)
+        return np.array(vecs, dtype="float32")
+
+    # Fallback deterministic embeddings (stable across runs)
+    import warnings
+    warnings.warn("Using fallback hashing embeddings. Install 'sentence-transformers' for better quality.")
+
+    def text_to_vector(s: str, dim=EMBED_DIM):
+        h = hashlib.sha256(s.encode("utf-8")).digest()
+        # Expand hash to required dim with repeated hashing
+        out = np.zeros(dim, dtype="float32")
+        i = 0
+        counter = 0
+        while i < dim:
+            chunk = hashlib.sha256(h + counter.to_bytes(2, "little")).digest()
+            for b in chunk:
+                if i >= dim:
+                    break
+                out[i] = (b - 128) / 128.0  # map byte to approx [-1,1]
+                i += 1
+            counter += 1
+        # normalize
+        norm = np.linalg.norm(out)
+        if norm > 0:
+            out /= norm
+        return out
+
+    vecs = [text_to_vector(s) for s in inputs]
     return np.array(vecs, dtype="float32")
 
 # =====================================================
@@ -129,6 +172,9 @@ def build_pubmed_index(articles):
 # =====================================================
 
 def search_pubmed(query, k=5):
+    if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
+        raise FileNotFoundError("Index files not found. Please upload a PDF first using /api/upload-pdf")
+
     index = faiss.read_index(INDEX_FILE)
     with open(META_FILE, "rb") as f:
         data = pickle.load(f)
@@ -217,6 +263,9 @@ def build_context_for_query(retrieved_chunks, question: str):
 
 # Replace answer_with_pubmed with token-safe prompt builder
 def answer_with_pubmed(query):
+    if not os.path.exists(INDEX_FILE) or not os.path.exists(META_FILE):
+        raise FileNotFoundError("No documents indexed. Please upload a PDF first using /api/upload-pdf")
+
     retrieved = search_pubmed(query, k=10)  # retrieve up to 10 but we will limit by token budget
     context = build_context_for_query(retrieved, question=query)
 
@@ -234,7 +283,11 @@ Question:
 Answer:
 """.strip()
 
-    return local_mistral_answer(prompt)
+    try:
+        return local_mistral_answer(prompt)
+    except Exception as e:
+        # Provide clearer runtime error so Flask can return 500 with helpful message
+        raise RuntimeError(f"LLM inference failed: {type(e).__name__}: {e}")
 
 
 def build_index_from_text(documents: list):
