@@ -56,7 +56,7 @@ def local_mistral_answer(prompt: str) -> str:
 # Load PubMedAPI from the sibling pdfreader.py reliably.
 try:
     # If running as a script in the same folder, this will work.
-    from pdfreader import PubMedAPI
+    from Backend.pdfimport import PubMedAPI
 except Exception:
     # Fallback: load pdfreader.py by explicit path (works even when Backend isn't a package)
     pdf_path = os.path.join(os.path.dirname(__file__), "pdfreader.py")

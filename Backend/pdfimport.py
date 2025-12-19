@@ -117,7 +117,7 @@ class PubMedAPI:
             pmid_elem = article.find(".//PMID")
             pmid = pmid_elem.text if pmid_elem is not None else "N/A"
             
-            # Extract title
+            # Extract titlell
             title_elem = article.find(".//ArticleTitle")
             title = title_elem.text if title_elem is not None else "N/A"
             
