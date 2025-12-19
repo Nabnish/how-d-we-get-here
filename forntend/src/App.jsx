@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import './App.css'
 
 function App() {
+  const [selectedFile, setSelectedFile] = useState(null)
+
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -53,7 +55,55 @@ function App() {
   const handleClear = () => {
     setMessages([])
   }
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
   
+    setSelectedFile(file)
+    setIsLoading(true)
+  
+    const formData = new FormData()
+    formData.append("file", file)
+  
+    try {
+      const res = await fetch("http://localhost:5000/api/upload-pdf", {
+        method: "POST",
+        body: formData
+      })
+  
+      if (!res.ok) throw new Error("Upload failed")
+  
+      const data = await res.json()
+  
+      // Show extracted text summary request
+      const explainRes = await fetch("http://localhost:5000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Explain the following medical report in simple language for a patient:\n\n${data.text}`
+        })
+      })
+  
+      const explainData = await explainRes.json()
+  
+      setMessages(prev => [
+        ...prev,
+        { role: "user", content: `Uploaded report: ${file.name}` },
+        { role: "assistant", content: explainData.response }
+      ])
+  
+    } catch (err) {
+      console.error(err)
+      setMessages(prev => [
+        ...prev,
+        { role: "assistant", content: "Error processing the medical report." }
+      ])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+  
+
 
   return (
     <div className="app-container">
@@ -140,23 +190,46 @@ function App() {
       </main>
 
       <footer className="input-container">
-        <form onSubmit={handleSend} className="input-form">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask a question about medical research..."
-            className="message-input"
-            disabled={isLoading}
-          />
-          <button 
-            type="submit" 
-            className="send-button"
-            disabled={isLoading || !input.trim()}
-          >
-            {isLoading ? '⏳' : '➤'}
-          </button>
-        </form>
+      <footer className="input-container">
+  <form onSubmit={handleSend} className="input-form">
+    
+    {/* Upload PDF button */}
+    <label className="upload-pill">
+      📄
+      <input
+        type="file"
+        accept=".pdf"
+        onChange={handleFileUpload}
+        disabled={isLoading}
+        hidden
+      />
+    </label>
+
+    {/* Chat input */}
+    <input
+      type="text"
+      value={input}
+      onChange={(e) => setInput(e.target.value)}
+      placeholder="Ask a question or upload a medical report..."
+      className="message-input"
+      disabled={isLoading}
+    />
+
+    {/* Send button */}
+    <button
+      type="submit"
+      className="send-button"
+      disabled={isLoading || !input.trim()}
+    >
+      {isLoading ? '⏳' : '➤'}
+    </button>
+
+  </form>
+</footer>
+
+           
+          
+        
       </footer>
     </div>
   )
