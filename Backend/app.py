@@ -150,6 +150,62 @@ def upload_pdf():
     })
 
 
+# ===============================
+# RAG Endpoints
+# ===============================
+
+@app.route("/api/rag/setup", methods=["POST"])
+def setup_rag():
+    """Create RAG index from PubMed search"""
+    data = request.get_json(force=True)
+    search_query = data.get("query", "").strip()
+    max_results = data.get("max_results", 10)
+    email = data.get("email", "example@example.com")
+    
+    if not search_query:
+        return jsonify({"error": "Search query is required"}), 400
+    
+    try:
+        from vectorConvert import build_index_for_query
+        result = build_index_for_query(
+            query=search_query,
+            max_results=max_results,
+            email=email
+        )
+        return jsonify({
+            "status": "success",
+            "indexed_chunks": result["indexed_chunks"],
+            "articles_indexed": result["articles_indexed"],
+            "message": f"RAG index created with {result['indexed_chunks']} chunks"
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/rag/query", methods=["POST"])
+def query_rag():
+    """Query the RAG system"""
+    data = request.get_json(force=True)
+    question = data.get("question", "").strip()
+    
+    if not question:
+        return jsonify({"error": "Question is required"}), 400
+    
+    try:
+        from vectorConvert import answer_with_pubmed
+        answer = answer_with_pubmed(question)
+        return jsonify({
+            "question": question,
+            "answer": answer
+        })
+    except FileNotFoundError:
+        return jsonify({
+            "error": "RAG index not found. Please call /api/rag/setup first"
+        }), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/health", methods=["GET"])
 def health():
     return jsonify({

@@ -35,13 +35,13 @@ EMBED_DIM = 384  # Reduced from 1536 (sentence-transformers default)
 from ctransformers import AutoModelForCausalLM
 from sentence_transformers import SentenceTransformer
 
-# Load LLM with GPU support if available (gpu_layers > 0 means layers offloaded to GPU)
+# Load LLM with CPU inference (gpu_layers=0 means CPU only)
 # Using smaller, faster quantized model for better performance
 llm = AutoModelForCausalLM.from_pretrained(
     "TheBloke/Mistral-7B-Instruct-v0.1-GGUF",
     model_file="mistral-7b-instruct-v0.1.Q3_K_S.gguf",
     model_type="mistral",
-    gpu_layers=50  # Offload layers to GPU (adjust based on VRAM availability)
+    gpu_layers=0  # CPU-only mode (set to >0 only if CUDA is installed)
 )
 
 # Fast embedding model (33MB, 384-dim vectors - much faster than 1536-dim)
@@ -51,19 +51,19 @@ def local_mistral_answer(prompt: str) -> str:
     return llm(prompt, max_new_tokens=256, temperature=0.7)  # Limit tokens for faster responses
 
 # =====================================================
-# PUBMED CLIENT (use pdfreader.py output)
+# PUBMED CLIENT (use pdfimport.py)
 # =====================================================
-# Load PubMedAPI from the sibling pdfreader.py reliably.
+# Load PubMedAPI from pdfimport.py reliably
 try:
     # If running as a script in the same folder, this will work.
-    from Backend.pdfimport import PubMedAPI
+    from pdfimport import PubMedAPI
 except Exception:
-    # Fallback: load pdfreader.py by explicit path (works even when Backend isn't a package)
-    pdf_path = os.path.join(os.path.dirname(__file__), "pdfreader.py")
-    spec = importlib.util.spec_from_file_location("pdfreader", pdf_path)
-    pdfreader = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(pdfreader)
-    PubMedAPI = getattr(pdfreader, "PubMedAPI")
+    # Fallback: load pdfimport.py by explicit path (works even when Backend isn't a package)
+    pdf_path = os.path.join(os.path.dirname(__file__), "pdfimport.py")
+    spec = importlib.util.spec_from_file_location("pdfimport", pdf_path)
+    pdfimport_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pdfimport_module)
+    PubMedAPI = getattr(pdfimport_module, "PubMedAPI")
 
 # =====================================================
 # DETERMINISTIC FALLBACK EMBEDDINGS
