@@ -19,8 +19,9 @@ except Exception:
 # CONFIG
 # =====================================================
 
-INDEX_FILE = "pubmed_faiss.index"
-META_FILE = "pubmed_meta.pkl"
+BASE_DIR = os.path.dirname(__file__)
+INDEX_FILE = os.path.join(BASE_DIR, "pubmed_faiss.index")
+META_FILE = os.path.join(BASE_DIR, "pubmed_meta.pkl")
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
@@ -47,11 +48,12 @@ def local_mistral_answer(prompt: str) -> str:
 # =====================================================
 # PUBMED CLIENT (use pdfreader.py output)
 # =====================================================
-# Replace the local stub with the real PubMedAPI from Backend/pdfreader.py.
+# Load PubMedAPI from the sibling pdfreader.py reliably.
 try:
-    from Backend.pdfreader import PubMedAPI
+    # If running as a script in the same folder, this will work.
+    from pdfreader import PubMedAPI
 except Exception:
-    # Fallback: load pdfreader.py by path (works even if Backend isn't a package)
+    # Fallback: load pdfreader.py by explicit path (works even when Backend isn't a package)
     pdf_path = os.path.join(os.path.dirname(__file__), "pdfreader.py")
     spec = importlib.util.spec_from_file_location("pdfreader", pdf_path)
     pdfreader = importlib.util.module_from_spec(spec)
@@ -131,6 +133,7 @@ def build_pubmed_index(articles):
 
     # Use plain ASCII to avoid encoding issues on Windows consoles
     print(f"Indexed {len(texts)} chunks")
+    return len(texts)
 
 # =====================================================
 # SEARCH
@@ -243,6 +246,24 @@ Answer:
 """.strip()
 
     return local_mistral_answer(prompt)
+
+
+def build_index_for_query(query: str, max_results: int = 10, email: str = None):
+    """High level helper: run PubMed search and build index files.
+
+    Returns number of indexed chunks (int).
+    """
+    pubmed = PubMedAPI(email=email if email else None)
+    articles = pubmed.search_and_fetch(query=query, max_results=max_results)
+    if not articles:
+        raise ValueError("No articles returned from PubMed for query")
+    count = build_pubmed_index(articles)
+    return {
+        "indexed_chunks": count,
+        "index_file": INDEX_FILE,
+        "meta_file": META_FILE,
+        "articles_indexed": len(articles)
+    }
 
 # =====================================================
 # MAIN

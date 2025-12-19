@@ -106,9 +106,36 @@ def chat():
         print(f"Error: {str(e)}")
         return jsonify({'error': f'An error occurred: {str(e)}'}), 500
 
+
+@app.route('/api/index', methods=['POST'])
+def index():
+    """Trigger building the FAISS index from a PubMed query.
+
+    Expected JSON: {"query": "diabetes treatment", "max_results": 10, "email": "you@example.com"}
+    """
+    try:
+        data = request.json or {}
+        query = data.get('query')
+        max_results = int(data.get('max_results', 10))
+        email = data.get('email')
+
+        if not query:
+            return jsonify({'error': 'query is required'}), 400
+
+        # import lazily to avoid heavy deps at server startup
+        from vectorConvert import build_index_for_query
+
+        result = build_index_for_query(query, max_results=max_results, email=email)
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Indexing error: {str(e)}")
+        return jsonify({'error': f'Indexing failed: {str(e)}'}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'llm_method': LLM_METHOD})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0')
+    
