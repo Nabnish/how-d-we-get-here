@@ -50,20 +50,7 @@ embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
 def local_mistral_answer(prompt: str) -> str:
     return llm(prompt, max_new_tokens=256, temperature=0.7)  # Limit tokens for faster responses
 
-# =====================================================
-# PUBMED CLIENT (use pdfimport.py)
-# =====================================================
-# Load PubMedAPI from pdfimport.py reliably
-try:
-    # If running as a script in the same folder, this will work.
-    from pdfimport import PubMedAPI
-except Exception:
-    # Fallback: load pdfimport.py by explicit path (works even when Backend isn't a package)
-    pdf_path = os.path.join(os.path.dirname(__file__), "pdfimport.py")
-    spec = importlib.util.spec_from_file_location("pdfimport", pdf_path)
-    pdfimport_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(pdfimport_module)
-    PubMedAPI = getattr(pdfimport_module, "PubMedAPI")
+# No PubMed dependency needed for file-based RAG
 
 # =====================================================
 # DETERMINISTIC FALLBACK EMBEDDINGS
@@ -250,21 +237,66 @@ Answer:
     return local_mistral_answer(prompt)
 
 
-def build_index_for_query(query: str, max_results: int = 10, email: str = None):
-    """High level helper: run PubMed search and build index files.
-
-    Returns number of indexed chunks (int).
+def build_index_from_text(documents: list):
+    """Build FAISS index from a list of document dictionaries.
+    
+    Args:
+        documents: List of dicts with 'text' key (and optionally 'title', 'source')
+    
+    Returns:
+        Dict with indexing results
     """
-    pubmed = PubMedAPI(email=email if email else None)
-    articles = pubmed.search_and_fetch(query=query, max_results=max_results)
-    if not articles:
-        raise ValueError("No articles returned from PubMed for query")
-    count = build_pubmed_index(articles)
+    if not documents:
+        raise ValueError("No documents provided")
+    
+    texts = []
+    metas = []
+    
+    for doc_idx, doc in enumerate(documents):
+        text = doc.get("text", "")
+        if not text:
+            continue
+        
+        for chunk_idx, chunk in enumerate(chunk_text(text)):
+            texts.append(chunk)
+            metas.append({
+                "doc_id": doc_idx,
+                "title": doc.get("title", "Document"),
+                "source": doc.get("source", "Uploaded"),
+                "chunk": chunk_idx
+            })
+    
+    if not texts:
+        raise ValueError("No text content to index")
+    
+    vectors = []
+    for i in range(0, len(texts), BATCH_SIZE):
+        batch = texts[i:i + BATCH_SIZE]
+        batch_vecs = get_embeddings(batch)
+        vectors.extend(batch_vecs)
+    
+    vectors = np.array(vectors, dtype="float32")
+    faiss.normalize_L2(vectors)
+    
+    if len(vectors) > 1000:
+        nlist = max(10, len(vectors) // 100)
+        index = faiss.IndexIVFFlat(faiss.IndexFlatIP(vectors.shape[1]), vectors.shape[1], nlist)
+        index.train(vectors)
+    else:
+        index = faiss.IndexFlatIP(vectors.shape[1])
+    
+    index.add(vectors)
+    
+    faiss.write_index(index, INDEX_FILE)
+    with open(META_FILE, "wb") as f:
+        pickle.dump({"texts": texts, "metas": metas}, f)
+    
+    print(f"Indexed {len(texts)} chunks from {len(documents)} documents")
     return {
-        "indexed_chunks": count,
+        "indexed_chunks": len(texts),
         "index_file": INDEX_FILE,
         "meta_file": META_FILE,
-        "articles_indexed": len(articles)
+        "documents_indexed": len(documents)
     }
 
 # =====================================================

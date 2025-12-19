@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import requests
-import pdfplumber
 from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
@@ -122,6 +121,7 @@ def chat():
 
 @app.route("/api/upload-pdf", methods=["POST"])
 def upload_pdf():
+    """Upload PDF and create RAG index"""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -137,54 +137,45 @@ def upload_pdf():
     file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
     file.save(file_path)
 
-    extracted_text = ""
-
-    # 🔹 pdfplumber extraction
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            extracted_text += page.extract_text() or ""
-
-    return jsonify({
-        "filename": filename,
-        "text": extracted_text[:8000]  # safety limit
-    })
-
-
-# ===============================
-# RAG Endpoints
-# ===============================
-
-@app.route("/api/rag/setup", methods=["POST"])
-def setup_rag():
-    """Create RAG index from PubMed search"""
-    data = request.get_json(force=True)
-    search_query = data.get("query", "").strip()
-    max_results = data.get("max_results", 10)
-    email = data.get("email", "example@example.com")
-    
-    if not search_query:
-        return jsonify({"error": "Search query is required"}), 400
-    
     try:
-        from vectorConvert import build_index_for_query
-        result = build_index_for_query(
-            query=search_query,
-            max_results=max_results,
-            email=email
-        )
+        import fitz
+        extracted_text = ""
+        
+        # Extract text from PDF using PyMuPDF
+        with fitz.open(file_path) as pdf:
+            for page in pdf:
+                extracted_text += page.get_text()
+        
+        if not extracted_text.strip():
+            return jsonify({"error": "Could not extract text from PDF"}), 400
+        
+        # Build RAG index from uploaded file
+        from vectorConvert import build_index_from_text
+        
+        result = build_index_from_text([{
+            "text": extracted_text,
+            "title": filename,
+            "source": "Uploaded PDF"
+        }])
+        
         return jsonify({
             "status": "success",
+            "filename": filename,
             "indexed_chunks": result["indexed_chunks"],
-            "articles_indexed": result["articles_indexed"],
-            "message": f"RAG index created with {result['indexed_chunks']} chunks"
+            "message": f"PDF indexed successfully with {result['indexed_chunks']} chunks"
         })
+    
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/rag/query", methods=["POST"])
-def query_rag():
-    """Query the RAG system"""
+# ===============================
+# RAG Query Endpoint
+# ===============================
+
+@app.route("/api/query", methods=["POST"])
+def query_documents():
+    """Query the RAG index from uploaded documents"""
     data = request.get_json(force=True)
     question = data.get("question", "").strip()
     
@@ -200,7 +191,7 @@ def query_rag():
         })
     except FileNotFoundError:
         return jsonify({
-            "error": "RAG index not found. Please call /api/rag/setup first"
+            "error": "No documents indexed. Please upload a PDF first using /api/upload-pdf"
         }), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
