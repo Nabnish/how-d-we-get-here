@@ -25,25 +25,30 @@ META_FILE = os.path.join(BASE_DIR, "pubmed_meta.pkl")
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
-BATCH_SIZE = 16
-EMBED_DIM = 1536
+BATCH_SIZE = 64  # Increased for better GPU utilization
+EMBED_DIM = 384  # Reduced from 1536 (sentence-transformers default)
 
 # =====================================================
 # LLM: Local Mistral 7B (ctransformers)
 # =====================================================
 
 from ctransformers import AutoModelForCausalLM
+from sentence_transformers import SentenceTransformer
 
-# Download/open GGUF file from HuggingFace:
-# https://huggingface.co/TheBloke/openinstruct-mistral-7B-GGUF
+# Load LLM with GPU support if available (gpu_layers > 0 means layers offloaded to GPU)
+# Using smaller, faster quantized model for better performance
 llm = AutoModelForCausalLM.from_pretrained(
-    "TheBloke/openinstruct-mistral-7B-GGUF",
-    model_file="openinstruct-mistral-7b.Q4_K_M.gguf",
-    model_type="mistral"
+    "TheBloke/Mistral-7B-Instruct-v0.1-GGUF",
+    model_file="mistral-7b-instruct-v0.1.Q3_K_S.gguf",
+    model_type="mistral",
+    gpu_layers=50  # Offload layers to GPU (adjust based on VRAM availability)
 )
 
+# Fast embedding model (33MB, 384-dim vectors - much faster than 1536-dim)
+embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+
 def local_mistral_answer(prompt: str) -> str:
-    return llm(prompt)
+    return llm(prompt, max_new_tokens=256, temperature=0.7)  # Limit tokens for faster responses
 
 # =====================================================
 # PUBMED CLIENT (use pdfreader.py output)
@@ -64,20 +69,9 @@ except Exception:
 # DETERMINISTIC FALLBACK EMBEDDINGS
 # =====================================================
 
-def deterministic_embedding(text, dim=EMBED_DIM):
-    h = hashlib.sha256(text.encode("utf-8")).digest()
-    arr = np.frombuffer(h, dtype=np.uint8).astype(np.float32)
-    reps = int(np.ceil(dim / arr.size))
-    vec = np.tile(arr, reps)[:dim]
-    norm = np.linalg.norm(vec)
-    if norm == 0:
-        vec += 1e-6
-        norm = np.linalg.norm(vec)
-    return (vec / norm).astype("float32")
-
 def get_embeddings(inputs):
-    # Fallback: deterministic embeddings for simplicity
-    vecs = [deterministic_embedding(t) for t in inputs]
+    """Use fast sentence-transformers for embeddings (GPU-accelerated)"""
+    vecs = embedding_model.encode(inputs, show_progress_bar=False, batch_size=64)
     return np.array(vecs, dtype="float32")
 
 # =====================================================
@@ -124,7 +118,15 @@ def build_pubmed_index(articles):
     vectors = np.array(vectors, dtype="float32")
     faiss.normalize_L2(vectors)
 
-    index = faiss.IndexFlatIP(vectors.shape[1])
+    # Use approximate nearest neighbor search (IVFFlat) for faster retrieval
+    # Falls back to IndexFlatIP for small indices
+    if len(vectors) > 1000:
+        nlist = max(10, len(vectors) // 100)  # Number of clusters
+        index = faiss.IndexIVFFlat(faiss.IndexFlatIP(vectors.shape[1]), vectors.shape[1], nlist)
+        index.train(vectors)
+    else:
+        index = faiss.IndexFlatIP(vectors.shape[1])
+    
     index.add(vectors)
 
     faiss.write_index(index, INDEX_FILE)
