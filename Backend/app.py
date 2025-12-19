@@ -145,7 +145,7 @@ def upload_pdf():
             extracted_text += page.extract_text() or ""
 
     return jsonify({
-        "filename": filename,front
+        "filename": filename,
         "text": extracted_text[:8000]  # safety limit
     })
 
