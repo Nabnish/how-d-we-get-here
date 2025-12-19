@@ -22,32 +22,23 @@ MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY', '')
 MISTRAL_API_URL = 'https://api.mistral.ai/v1/chat/completions'
 
 def chat_with_ollama(user_message, system_message):
-    """Use Ollama for local Mistral 7B inference"""
-    try:
-        url = f"{OLLAMA_BASE_URL}/api/chat"
-        payload = {
-            "model": OLLAMA_MODEL,
-            "messages": [
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_message}
-    ],
-    "stream": False,
-    "options": {
-        "temperature": 0.7,
-        "num_predict": 500
-    }
-}
+    url = "http://localhost:11434/api/chat"
 
-        
-        response = requests.post(url, json=payload, timeout=120)
-        response.raise_for_status()
-        data = response.json()
-        
-        return data.get('message', {}).get('content', 'No response generated')
-    
-    except Exception as e:
-        print(f"Ollama error: {str(e)}")
-        raise
+    payload = {
+        "model": "mistral:7b",
+        "messages": [
+            {"role": "system", "content": system_message},
+            {"role": "user", "content": user_message}
+        ],
+        "stream": False
+    }
+
+    response = requests.post(url, json=payload, timeout=120)
+    response.raise_for_status()
+    data = response.json()
+
+    return data["message"]["content"]
+
 
 def chat_with_mistral_api(user_message, system_message):
     """Use Mistral AI API (cloud-based)"""
@@ -79,32 +70,16 @@ def chat_with_mistral_api(user_message, system_message):
 
 @app.route('/api/chat', methods=['POST'])
 def chat():
-    try:
-        data = request.json
-        user_message = data.get('message', '')
-        
-        if not user_message:
-            return jsonify({'error': 'Message is required'}), 400
-        
-        system_message = "You are a helpful medical research assistant. You provide accurate, evidence-based information about medical topics, treatments, and research. Always cite sources when possible and remind users to consult healthcare professionals for medical advice."
-        
-        # Choose LLM method
-        if LLM_METHOD == 'ollama':
-            assistant_message = chat_with_ollama(user_message, system_message)
-        elif LLM_METHOD == 'mistral_api':
-            if not MISTRAL_API_KEY:
-                return jsonify({'error': 'MISTRAL_API_KEY not configured'}), 500
-            assistant_message = chat_with_mistral_api(user_message, system_message)
-        else:
-            return jsonify({'error': f'Unknown LLM_METHOD: {LLM_METHOD}'}), 500
-        
-        return jsonify({
-            'response': assistant_message
-        })
-    
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return jsonify({'error': f'An error occurred: {str(e)}'}), 500
+    data = request.get_json()
+    user_message = data.get('message', '').strip()
+
+    if not user_message:
+        return jsonify({'error': 'Message required'}), 400
+
+    system_message = "You explain medical information clearly to patients."
+
+    reply = chat_with_ollama(user_message, system_message)
+    return jsonify({"response": reply})
 
 
 @app.route('/api/index', methods=['POST'])
@@ -135,6 +110,8 @@ def index():
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'llm_method': LLM_METHOD})
+
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0')
