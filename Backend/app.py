@@ -2,20 +2,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import os
 import requests
-import pdfplumber
-from werkzeug.utils import secure_filename
 from dotenv import load_dotenv
 
+# Load environment variables
 load_dotenv()
 
-app = Flask(__name__)          # ✅ app FIRST
-CORS(app)
-
-UPLOAD_FOLDER = "uploads"
-ALLOWED_EXTENSIONS = {"pdf"}
-
-app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
-
+app = Flask(__name__)
+CORS(app)  # Enable CORS for frontend
 
 # Configuration - Choose your method: 'ollama' or 'mistral_api'
 LLM_METHOD = os.getenv('LLM_METHOD', 'ollama')  # Default to Ollama
@@ -88,39 +81,38 @@ def chat():
     reply = chat_with_ollama(user_message, system_message)
     return jsonify({"response": reply})
 
+
+@app.route('/api/index', methods=['POST'])
+def index():
+    """Trigger building the FAISS index from a PubMed query.
+
+    Expected JSON: {"query": "diabetes treatment", "max_results": 10, "email": "you@example.com"}
+    """
+    try:
+        data = request.json or {}
+        query = data.get('query')
+        max_results = int(data.get('max_results', 10))
+        email = data.get('email')
+
+        if not query:
+            return jsonify({'error': 'query is required'}), 400
+
+        # import lazily to avoid heavy deps at server startup
+        from vectorConvert import build_index_for_query
+
+        result = build_index_for_query(query, max_results=max_results, email=email)
+        return jsonify(result)
+
+    except Exception as e:
+        print(f"Indexing error: {str(e)}")
+        return jsonify({'error': f'Indexing failed: {str(e)}'}), 500
+
 @app.route('/api/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'llm_method': LLM_METHOD})
-@app.route("/api/upload-pdf", methods=["POST"])
-def upload_pdf():
-    if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
-
-    file = request.files["file"]
-
-    if file.filename == "":
-        return jsonify({"error": "No file selected"}), 400
-
-    if not allowed_file(file.filename):
-        return jsonify({"error": "Only PDF files allowed"}), 400
-
-    filename = secure_filename(file.filename)
-    file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
-    file.save(file_path)
-
-    extracted_text = ""
-
-    with pdfplumber.open(file_path) as pdf:
-        for page in pdf.pages:
-            extracted_text += page.extract_text() or ""
-
-    return jsonify({
-        "filename": filename,
-        "text": extracted_text[:8000]  # safety limit
-    })
-
 
 
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000, host='0.0.0.0')
+    

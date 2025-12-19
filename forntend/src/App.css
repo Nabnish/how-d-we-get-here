@@ -3,47 +3,6 @@
   padding: 0;
   box-sizing: border-box;
 }
-/* Upload button as circular icon */
-.upload-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #edf2f7;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s ease;
-  border: 2px solid #e2e8f0;
-  flex-shrink: 0;
-}
-
-.upload-pill:hover {
-  background: #e2e8f0;
-  border-color: #667eea;
-  transform: scale(1.05);
-}
-
-.upload-pill:active {
-  transform: scale(0.95);
-}
-
-.upload-pill:has(input:disabled) {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Keep input bar compact and aligned */
-.input-form {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-
 
 .app-container {
   display: flex;
