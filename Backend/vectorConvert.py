@@ -6,6 +6,8 @@ import time
 import os
 import importlib.util
 import sys
+from pdfimport import PubMedAPI
+
 
 # Ensure console uses UTF-8 where supported (prevents UnicodeEncodeError on Windows)
 try:
@@ -270,9 +272,19 @@ def answer_with_pubmed(query):
     context = build_context_for_query(retrieved, question=query)
 
     prompt = f"""
-You are a medical research assistant.
-Answer ONLY using the context below.
-If the answer is not in the context, say "I don't know."
+You are a medical report explanation assistant.
+
+You MUST answer strictly from the provided text.
+If information is missing, say "Not mentioned in the document".
+Do NOT add external medical knowledge.
+
+
+STRICT RULES (must follow):
+- Use ONLY the information present in the context.
+- DO NOT assume missing tests.
+- DO NOT invent lab values or test names.
+- If the context does NOT contain laboratory test results, say EXACTLY:
+  "This report does not contain laboratory test results."
 
 Context:
 {context}
@@ -356,8 +368,7 @@ def build_index_from_text(documents: list):
 # MAIN
 # =====================================================
 
-if __name__ == "__main__":
-    pubmed = PubMedAPI(email="hrithikmadhu2008@gmail.com")
+
 
     articles = pubmed.search_and_fetch(
         query="diabetes treatment",

@@ -46,6 +46,29 @@ MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 # ===============================
 # LLM Functions
 # ===============================
+def classify_document(text: str) -> str:
+    text = text.lower()
+
+    lab_keywords = [
+        "hemoglobin", "wbc", "rbc", "platelet",
+        "cbc", "mg/dl", "g/dl", "cells/mcl"
+    ]
+
+    mental_keywords = [
+        "mental capacity", "dementia", "stroke",
+        "cognitive", "orientation", "incontinent"
+    ]
+
+    lab_score = sum(1 for k in lab_keywords if k in text)
+    mental_score = sum(1 for k in mental_keywords if k in text)
+
+    if lab_score >= 2:
+        return "LAB_REPORT"
+    if mental_score >= 2:
+        return "MENTAL_CAPACITY_REPORT"
+
+    return "UNKNOWN"
+
 def chat_with_ollama(user_message: str, system_message: str) -> str:
     url = f"{OLLAMA_BASE_URL}/api/chat"
 
@@ -64,7 +87,6 @@ def chat_with_ollama(user_message: str, system_message: str) -> str:
         data = response.json()
         return data.get("message", {}).get("content", "")
     except requests.RequestException as e:
-        # Raise a runtime error so callers return a useful 500 message
         raise RuntimeError(f"Ollama request failed: {e}")
 
 
@@ -123,30 +145,51 @@ def llm_status():
 # ===============================
 @app.route("/api/chat", methods=["POST"])
 def chat():
+    from vectorConvert import search_pubmed, build_context_for_query
+    
     data = request.get_json(force=True)
     user_message = data.get("message", "").strip()
+    ignore_rag = bool(data.get("ignore_rag", False))
 
     if not user_message:
         return jsonify({"error": "Message is required"}), 400
 
     system_message = (
         "You explain medical information clearly and safely to patients. "
-        "Always encourage consulting a healthcare professional."
+        "Always encourage consulting a healthcare professional. "
+        "Only use the provided context. If context is missing, say so."
     )
 
-    if LLM_METHOD == "ollama":
-        reply = chat_with_ollama(user_message, system_message)
-    elif LLM_METHOD == "mistral_api":
-        reply = chat_with_mistral_api(user_message, system_message)
-    else:
-        return jsonify({"error": "Invalid LLM_METHOD"}), 500
+    # Use RAG to retrieve relevant chunks from indexed PDF
+    full_user_message = user_message
+    if not ignore_rag:
+        try:
+            retrieved_chunks = search_pubmed(user_message, k=5)
+            if retrieved_chunks:
+                context = build_context_for_query(retrieved_chunks, user_message)
+                full_user_message = (
+                    f"Using this medical document context:\n\n{context}\n\n"
+                    f"Question: {user_message}"
+                )
+        except Exception as e:
+            print(f"RAG retrieval warning: {e}")
+            # Continue with just the user message if RAG fails
 
-    return jsonify({"response": reply})
+    try:
+        if LLM_METHOD == "ollama":
+            reply = chat_with_ollama(full_user_message, system_message)
+        elif LLM_METHOD == "mistral_api":
+            reply = chat_with_mistral_api(full_user_message, system_message)
+        else:
+            return jsonify({"error": "Invalid LLM_METHOD"}), 500
+
+        return jsonify({"response": reply})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/upload-pdf", methods=["POST"])
 def upload_pdf():
-    """Upload PDF and create RAG index"""
     if "file" not in request.files:
         return jsonify({"error": "No file provided"}), 400
 
@@ -163,62 +206,69 @@ def upload_pdf():
     file.save(file_path)
 
     try:
-        import fitz
-        extracted_text = ""
-        
-        # Extract text from PDF using PyMuPDF
+        import fitz  # PyMuPDF
+        from cleanup import clean_medical_text
+        from nlp import extract_lab_results
+        from vectorConvert import build_index_from_text
+
+        # 1️⃣ Extract raw text from PDF
+        raw_text = ""
         with fitz.open(file_path) as pdf:
             for page in pdf:
-                extracted_text += page.get_text()
-        
-        if not extracted_text.strip():
-            return jsonify({"error": "Could not extract text from PDF"}), 400
-        
-        # Build RAG index from uploaded file
-        from vectorConvert import build_index_from_text
-        
-        result = build_index_from_text([{
-            "text": extracted_text,
+                raw_text += page.get_text()
+
+        if not raw_text.strip():
+            return jsonify({"error": "PDF contains no extractable text"}), 400
+
+        # 2️⃣ Clean text
+        clean_text = clean_medical_text(raw_text)
+
+        if len(clean_text) < 300:
+            return jsonify({"error": "PDF text too short or unreadable"}), 400
+
+        # 3️⃣ Extract NLP results (structured data)
+        nlp_output = extract_lab_results(clean_text)
+
+        # 4️⃣ Document classification
+        doc_type = classify_document(clean_text)
+
+        # 5️⃣ Format structured NLP data
+        structured_text = ""
+        if nlp_output.get("lab_results"):
+            structured_lines = ["=== EXTRACTED LAB RESULTS ==="]
+            for lab in nlp_output["lab_results"]:
+                structured_lines.append(
+                    f"Test: {lab['test_name']}, "
+                    f"Value: {lab['value']} {lab['unit']}, "
+                    f"Reference: {lab['reference_range']}, "
+                    f"Status: {lab['status']}"
+                )
+            structured_text = "\n".join(structured_lines)
+
+        # 6️⃣ BUILD INDEX: Send structured + cleaned text to RAG (FAISS)
+        document_for_rag = {
+            "text": f"{structured_text}\n\n{clean_text}",
             "title": filename,
-            "source": "Uploaded PDF"
-        }])
-        
+            "source": "Medical PDF Upload",
+            "doc_type": doc_type
+        }
+
+        index_result = build_index_from_text([document_for_rag])
+
         return jsonify({
             "status": "success",
             "filename": filename,
-            "indexed_chunks": result["indexed_chunks"],
-            "message": f"PDF indexed successfully with {result['indexed_chunks']} chunks"
+            "document_type": doc_type,
+            "extracted_chars": len(clean_text),
+            "labs_detected": len(nlp_output.get("lab_results", [])),
+            "nlp_output": nlp_output,
+            "rag_indexed": index_result,
+            "message": "PDF processed: NLP extracted → indexed to RAG → ready for chat queries"
         })
-    
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-
-# ===============================
-# RAG Query Endpoint
-# ===============================
-
-@app.route("/api/query", methods=["POST"])
-def query_documents():
-    """Query the RAG index from uploaded documents"""
-    data = request.get_json(force=True)
-    question = data.get("question", "").strip()
-    
-    if not question:
-        return jsonify({"error": "Question is required"}), 400
-    
-    try:
-        from vectorConvert import answer_with_pubmed
-        answer = answer_with_pubmed(question)
-        return jsonify({
-            "question": question,
-            "answer": answer
-        })
-    except FileNotFoundError:
-        return jsonify({
-            "error": "No documents indexed. Please upload a PDF first using /api/upload-pdf"
-        }), 404
-    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 

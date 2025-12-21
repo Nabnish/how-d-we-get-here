@@ -1,216 +1,57 @@
+/* RESET */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
-/* Upload button as circular icon */
-.upload-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #edf2f7;
-  cursor: pointer;
-  font-size: 1.2rem;
-  transition: all 0.2s ease;
-  border: 2px solid #e2e8f0;
-  flex-shrink: 0;
-}
 
-.upload-pill:hover {
-  background: #e2e8f0;
-  border-color: #667eea;
-  transform: scale(1.05);
-}
-
-.upload-pill:active {
-  transform: scale(0.95);
-}
-
-.upload-pill:has(input:disabled) {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Keep input bar compact and aligned */
-.input-form {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-
+/* APP BASE */
 .app-container {
+  height: 100vh;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  height: 100vh;
-  min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
-  overflow: hidden;
+  background: #f0fdf4;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
+/* HEADER */
 .app-header {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  padding: 1.5rem 2rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 10;
-}
-
-.header-content {
-  flex: 1;
+  background: linear-gradient(90deg, #020617, #064e3b);
+  padding: 1.6rem 2.2rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
 }
 
 .app-title {
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: #2d3748;
-  margin-bottom: 0.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.title-icon {
+  color: #ecfdf5;
   font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
-.app-subtitle {
-  color: #718096;
-  font-size: 0.95rem;
-  margin: 0;
-}
-
-.clear-button {
-  background: #e53e3e;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.clear-button:hover {
-  background: #c53030;
-  transform: translateY(-1px);
-}
-
+/* CHAT AREA */
 .chat-container {
   flex: 1;
+  background: linear-gradient(
+    180deg,
+    #ecfdf5 0%,
+    #f7fee7 100%
+  );
+  padding: 2rem;
   overflow-y: auto;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-}
-
-.welcome-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-
-.welcome-content {
-  text-align: center;
-  max-width: 600px;
-  padding: 2rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-}
-
-.welcome-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.welcome-content h2 {
-  color: #2d3748;
-  margin-bottom: 1rem;
-  font-size: 2rem;
-}
-
-.welcome-content > p {
-  color: #718096;
-  font-size: 1.1rem;
-  margin-bottom: 2rem;
-  line-height: 1.6;
-}
-
-.example-questions {
-  margin-top: 2rem;
-}
-
-.examples-title {
-  color: #4a5568;
-  font-weight: 600;
-  margin-bottom: 1rem;
-  font-size: 1rem;
-}
-
-.example-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  justify-content: center;
-}
-
-.example-chip {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 25px;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 500;
-  transition: all 0.2s;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.example-chip:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
 .messages-list {
+  max-width: 900px;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
-  max-width: 900px;
-  width: 100%;
-  margin: 0 auto;
+  gap: 1.6rem;
 }
 
+/* MESSAGE BLOCKS */
 .message {
   display: flex;
   gap: 1rem;
-  animation: fadeIn 0.3s ease-in;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 .message.user {
@@ -218,133 +59,104 @@
 }
 
 .message-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
+  background: #a7f3d0;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
-  flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(10px);
+  font-size: 1.4rem;
 }
 
-.message.user .message-avatar {
-  background: rgba(102, 126, 234, 0.3);
-}
-
-.message-content {
-  flex: 1;
-  max-width: 70%;
-}
-
-.message.user .message-content {
-  text-align: right;
+.message.assistant .message-avatar {
+  background: #064e3b;
+  color: #ecfdf5;
 }
 
 .message-text {
-  background: rgba(255, 255, 255, 0.95);
-  padding: 1rem 1.25rem;
-  border-radius: 18px;
-  color: #2d3748;
+  background: #ffffff;
+  padding: 1.1rem 1.4rem;
+  border-radius: 14px;
+  max-width: 70%;
+  color: #020617;
   line-height: 1.6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  word-wrap: break-word;
-  white-space: pre-wrap;
+  box-shadow: 0 4px 14px rgba(2, 6, 23, 0.15);
 }
 
 .message.user .message-text {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #064e3b, #10b981);
   color: white;
-  margin-left: auto;
 }
 
-.loading-dots {
-  display: flex;
-  gap: 0.5rem;
-  padding: 1rem 1.25rem;
-}
-
-.loading-dots span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #667eea;
-  animation: bounce 1.4s infinite ease-in-out both;
-}
-
-.loading-dots span:nth-child(1) {
-  animation-delay: -0.32s;
-}
-
-.loading-dots span:nth-child(2) {
-  animation-delay: -0.16s;
-}
-
-@keyframes bounce {
-  0%, 80%, 100% {
-    transform: scale(0);
-  }
-  40% {
-    transform: scale(1);
-  }
-}
-
+/* INPUT AREA */
 .input-container {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  padding: 1.5rem 2rem;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  background: #020617;
+  padding: 1.4rem 2rem;
+  box-shadow: 0 -6px 22px rgba(0, 0, 0, 0.6);
 }
 
 .input-form {
-  display: flex;
-  gap: 1rem;
   max-width: 900px;
   margin: 0 auto;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
 }
 
-.message-input {
-  flex: 1;
-  padding: 1rem 1.5rem;
-  border: 2px solid #e2e8f0;
-  border-radius: 25px;
-  font-size: 1rem;
-  outline: none;
-  transition: all 0.2s;
-  background: white;
-}
-
-.message-input:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.message-input:disabled {
-  background: #f7fafc;
-  cursor: not-allowed;
-}
-
-.send-button {
-  width: 50px;
-  height: 50px;
+/* FILE UPLOAD */
+.upload-pill {
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: all 0.2s;
+  background: #022c22;
+  border: 2px solid #10b981;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #ecfdf5;
+  transition: all 0.2s ease;
+}
+
+.upload-pill:hover {
+  background: #10b981;
+  color: #020617;
+  transform: scale(1.05);
+}
+
+/* TEXT INPUT */
+.message-input {
+  flex: 1;
+  padding: 0.95rem 1.4rem;
+  border-radius: 999px;
+  border: none;
+  font-size: 1rem;
+  background: #ecfdf5;
+  color: #020617;
+}
+
+.message-input::placeholder {
+  color: #475569;
+}
+
+/* SEND BUTTON */
+.send-button {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #10b981;
+  border: none;
+  color: #020617;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .send-button:hover:not(:disabled) {
-  transform: scale(1.05);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  background: #34d399;
+  transform: scale(1.08);
 }
 
 .send-button:disabled {
@@ -352,55 +164,508 @@
   cursor: not-allowed;
 }
 
-/* Scrollbar styling */
-.chat-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.chat-container::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-}
-
-.chat-container::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 10px;
-}
-
-.chat-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-/* Responsive design */
+/* RESPONSIVE */
 @media (max-width: 768px) {
-  .app-header {
-    padding: 1rem;
-    flex-direction: column;
-    gap: 1rem;
-    align-items: flex-start;
-  }
-
-  .app-title {
-    font-size: 1.5rem;
-  }
-
   .chat-container {
-    padding: 1rem;
+    padding: 1.2rem;
   }
 
-  .message-content {
+  .message-text {
     max-width: 85%;
   }
 
-  .input-container {
-    padding: 1rem;
+  .app-title {
+    font-size: 1.6rem;
+  }
+}
+
+/* ===== FORCE RED–BLACK THEME ===== */
+
+/* Whole app background */
+.app-container {
+  background: linear-gradient(180deg, #020617, #450a0a) !important;
+}
+
+/* Header */
+.app-header {
+  background: linear-gradient(90deg, #000000, #7f1d1d) !important;
+}
+
+/* Chat area (removes white completely) */
+.chat-container {
+  background: linear-gradient(180deg, #020617, #1f2933) !important;
+}
+
+/* Message bubbles */
+.message-text {
+  background: #111827 !important;
+  color: #f8fafc !important;
+}
+
+.message.user .message-text {
+  background: linear-gradient(135deg, #7f1d1d, #dc2626) !important;
+  color: white !important;
+}
+
+/* Avatars */
+.message-avatar {
+  background: #7f1d1d !important;
+  color: white !important;
+}
+
+/* Input area */
+.input-container {
+  background: linear-gradient(90deg, #000000, #020617) !important;
+}
+
+/* Text input */
+.message-input {
+  background: #020617 !important;
+  color: #f8fafc !important;
+  border: 1px solid #7f1d1d !important;
+}
+
+.message-input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Upload button */
+.upload-pill {
+  background: #020617 !important;
+  border: 2px solid #dc2626 !important;
+  color: white !important;
+}
+
+/* Send button */
+.send-button {
+  background: #dc2626 !important;
+  color: white !important;
+}
+/* =========================
+   FULL SCREEN RED–BLACK OVERRIDE
+   ========================= */
+
+/* Root + body + app */
+html, body, #root, .app-container {
+  height: 100%;
+  background: linear-gradient(
+    180deg,
+    #000000 0%,
+    #1a0000 35%,
+    #7f1d1d 100%
+  ) !important;
+}
+
+/* Header */
+.app-header {
+  background: transparent !important;
+}
+
+/* Chat container */
+.chat-container {
+  background: transparent !important;
+}
+
+/* Input footer */
+.input-container {
+  background: transparent !important;
+}
+
+/* Messages list spacing stays same */
+.messages-list {
+  background: transparent !important;
+}
+
+/* Message bubbles */
+.message-text {
+  background: rgba(0, 0, 0, 0.65) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+
+.message.user .message-text {
+  background: linear-gradient(
+    135deg,
+    #7f1d1d,
+    #dc2626
+  ) !important;
+  color: white !important;
+}
+
+/* Avatars */
+.message-avatar {
+  background: linear-gradient(
+    135deg,
+    #7f1d1d,
+    #dc2626
+  ) !important;
+  color: white !important;
+}
+
+/* Input */
+.message-input {
+  background: rgba(0, 0, 0, 0.7) !important;
+  color: #f8fafc !important;
+  border: 1px solid #dc2626 !important;
+}
+
+.message-input::placeholder {
+  color: #9ca3af !important;
+}
+
+/* Upload button */
+.upload-pill {
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 2px solid #dc2626 !important;
+  color: white !important;
+}
+
+/* Send button */
+.send-button {
+  background: linear-gradient(
+    135deg,
+    #7f1d1d,
+    #dc2626
+  ) !important;
+  color: white !important;
+}
+
+/* Remove shadows that break gradient illusion */
+.app-header,
+.input-container,
+.message-text {
+  box-shadow: none !important;
+}
+/* =========================
+   BOTTOM DESIGN BAND
+========================= */
+
+/* Wrapper illusion above input */
+.input-container::before {
+  content: "CARE PULSE";
+  display: block;
+  text-align: center;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  font-size: 0.9rem;
+  margin-bottom: 0.8rem;
+  color: #fecaca;
+  opacity: 0.9;
+}
+
+/* Decorative pulse line */
+.input-container::after {
+  content: "";
+  display: block;
+  height: 2px;
+  width: 100%;
+  margin-bottom: 1rem;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #dc2626,
+    #fecaca,
+    #dc2626,
+    transparent
+  );
+  opacity: 0.8;
+}
+
+/* =========================
+   INPUT AREA TUNING
+========================= */
+
+.input-container {
+  padding-top: 2.2rem !important;
+}
+
+/* Beige-white input for contrast */
+.message-input {
+  background: #f5f5dc !important;   /* beige */
+  color: #020617 !important;
+  border: 2px solid #dc2626 !important;
+  font-weight: 500;
+}
+
+.message-input::placeholder {
+  color: #475569 !important;
+}
+
+/* Slight elevation */
+.message-input:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25) !important;
+}
+
+/* Upload pill contrast */
+.upload-pill {
+  background: #111827 !important;
+  border-color: #fecaca !important;
+}
+
+/* Send button stronger */
+.send-button {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.25) !important;
+}
+/* =========================
+   CARE PULSE – HERO TITLE
+========================= */
+
+.input-container::after {
+  content: "💓  CARE  PULSE  🩺";
+  display: block;
+  text-align: center;
+
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.4rem;
+
+  margin-bottom: 1.4rem;
+
+  color: #fecaca;
+  text-shadow:
+    0 0 8px rgba(220, 38, 38, 0.6),
+    0 0 16px rgba(220, 38, 38, 0.4);
+}
+
+/* =========================
+   INTRO TEXT ABOVE TITLE
+========================= */
+
+.input-container::before {
+  content: "AI-powered medical insights, simplified for clarity.";
+  display: block;
+  text-align: center;
+
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.12rem;
+
+  margin-bottom: 0.6rem;
+
+  color: #e5e7eb;
+  opacity: 0.85;
+}
+/* Make header title secondary */
+.app-title {
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+  opacity: 0.85;
+}
+/* =========================
+   CENTER HERO: CARE PULSE
+========================= */
+
+.chat-container::before {
+  content: "💓  CARE  PULSE  🩺";
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  font-size: 3.6rem;
+  font-weight: 900;
+  letter-spacing: 0.45rem;
+
+  color: #fecaca;
+  text-align: center;
+
+  text-shadow:
+    0 0 10px rgba(220, 38, 38, 0.7),
+    0 0 22px rgba(220, 38, 38, 0.6);
+
+  pointer-events: none;
+}
+/* Intro text under CARE PULSE */
+.chat-container::after {
+  content:
+    "Your AI assistant for understanding medical reports.\A"
+    "Upload documents or ask questions in simple language.\A"
+    "Clear insights. Faster decisions. Better care.";
+
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  white-space: pre-line;
+  text-align: center;
+
+  font-size: 1.1rem;
+  font-weight: 500;
+  line-height: 1.9;
+
+  color: #e5e7eb;
+  opacity: 0.9;
+
+  pointer-events: none;
+}
+/* Remove repeated CARE PULSE below input bar */
+.input-container::after {
+  content: none !important;
+}
+/* Improve spacing between CARE PULSE and intro text */
+.chat-container::after {
+  top: 56% !important;        /* pushes intro lower */
+  line-height: 2.2 !important;
+  margin-top: 1.2rem;
+}
+.chat-container::before {
+  top: 40% !important;        /* keeps CARE PULSE higher */
+}
+/* =========================
+   ELEGANT TYPOGRAPHY TUNING
+========================= */
+
+/* CARE PULSE – more elegant */
+.chat-container::before {
+  font-family: 'Playfair Display', 'Inter', serif !important;
+  letter-spacing: 0.3rem !important;
+}
+
+/* Intro text – compact & refined */
+.chat-container::after {
+  font-family: 'Inter', system-ui, sans-serif !important;
+
+  font-size: 1.05rem !important;
+  line-height: 1.6 !important;     /* reduced spacing */
+  letter-spacing: 0.03rem !important;
+
+  top: 52% !important;             /* slightly closer to title */
+}
+
+/* Reduce spacing between individual intro lines */
+.chat-container::after {
+  white-space: pre-line;
+}
+
+/* Subtle text color refinement */
+.chat-container::after {
+  color: #f1f5f9 !important;
+  opacity: 0.9;
+}
+
+/* =========================
+   CARE PULSE – SUBTLE PULSE
+========================= */
+
+@keyframes carePulse {
+  0% {
+    transform: scale(1);
+    text-shadow:
+      0 0 6px rgba(220, 38, 38, 0.4),
+      0 0 14px rgba(220, 38, 38, 0.3);
+  }
+  50% {
+    transform: scale(1.04);
+    text-shadow:
+      0 0 10px rgba(220, 38, 38, 0.7),
+      0 0 22px rgba(220, 38, 38, 0.6);
+  }
+  100% {
+    transform: scale(1);
+    text-shadow:
+      0 0 6px rgba(220, 38, 38, 0.4),
+      0 0 14px rgba(220, 38, 38, 0.3);
+  }
+}
+
+/* Apply pulse to CARE PULSE title */
+.chat-container::before {
+  animation: carePulse 3.2s ease-in-out infinite;
+}
+/* =========================
+   FIX CARE PULSE POSITION
+========================= */
+
+/* CARE PULSE title */
+.chat-container::before {
+  top: 36% !important;              /* move title UP */
+  transform: translate(-50%, -50%);
+}
+
+/* Intro text */
+.chat-container::after {
+  top: 48% !important;              /* place intro BELOW title */
+  transform: translate(-50%, -50%);
+}
+/* =========================
+   HARD POSITION FIX (GUARANTEED)
+========================= */
+
+/* CARE PULSE – force ABOVE */
+.chat-container::before {
+  top: 50% !important;
+  transform: translate(-50%, -90%) !important; /* move UP */
+  z-index: 2;
+}
+
+/* Intro text – force BELOW */
+.chat-container::after {
+  top: 50% !important;
+  transform: translate(-50%, 10%) !important;  /* move DOWN */
+  z-index: 1;
+}
+/* =========================
+   CARE PULSE – GLOW + SIZE
+========================= */
+
+@keyframes carePulseBeat {
+  0% {
+    transform: translate(-50%, -90%) scale(0.96);
+    text-shadow:
+      0 0 6px rgba(220, 38, 38, 0.3),
+      0 0 14px rgba(220, 38, 38, 0.25);
   }
 
-  .example-chips {
-    flex-direction: column;
+  35% {
+    transform: translate(-50%, -90%) scale(1.08);
+    text-shadow:
+      0 0 14px rgba(220, 38, 38, 0.8),
+      0 0 30px rgba(220, 38, 38, 0.7);
   }
 
-  .example-chip {
-    width: 100%;
+  60% {
+    transform: translate(-50%, -90%) scale(1.02);
+    text-shadow:
+      0 0 10px rgba(220, 38, 38, 0.5),
+      0 0 22px rgba(220, 38, 38, 0.45);
   }
+
+  100% {
+    transform: translate(-50%, -90%) scale(0.96);
+    text-shadow:
+      0 0 6px rgba(220, 38, 38, 0.3),
+      0 0 14px rgba(220, 38, 38, 0.25);
+  }
+}
+
+/* Apply to CARE PULSE title */
+.chat-container::before {
+  animation: carePulseBeat 3.4s cubic-bezier(0.4, 0, 0.6, 1) infinite !important;
+}
+/* =========================
+   HIDE HERO WHEN CHAT STARTS
+========================= */
+
+/* When messages exist, fade out CARE PULSE title */
+.chat-container:has(.message)::before {
+  opacity: 0 !important;
+  transform: translate(-50%, -110%) scale(0.9) !important;
+  pointer-events: none;
+}
+
+/* When messages exist, fade out intro text */
+.chat-container:has(.message)::after {
+  opacity: 0 !important;
+  transform: translate(-50%, 30%) scale(0.95) !important;
+  pointer-events: none;
+}
+
+/* Smooth transition (important for polish) */
+.chat-container::before,
+.chat-container::after {
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
 }
