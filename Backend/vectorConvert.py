@@ -216,13 +216,11 @@ def answer_with_pubmed(question: str):
     )
 
     prompt = f"""
-<<<<<<< HEAD
 You are a medical report explanation assistant.
 
 You MUST answer strictly from the provided text.
 If information is missing, say "Not mentioned in the document".
 Do NOT add external medical knowledge.
-
 
 STRICT RULES (must follow):
 - Use ONLY the information present in the context.
@@ -230,11 +228,6 @@ STRICT RULES (must follow):
 - DO NOT invent lab values or test names.
 - If the context does NOT contain laboratory test results, say EXACTLY:
   "This report does not contain laboratory test results."
-=======
-You are a medical assistant.
-Answer ONLY using the context below.
-If the answer is not present, say "I don't know."
->>>>>>> 1234217331549fca723921f3108659fe08491817
 
 Context:
 {context}
@@ -246,6 +239,20 @@ Answer:
 """.strip()
 
     return local_mistral_answer(prompt)
+
+
+def search_pubmed(query: str, k: int = 5):
+    """Alias for search_index for API compatibility"""
+    return search_index(query, k)
+
+
+def build_context_for_query(retrieved_chunks, query: str) -> str:
+    """Build context from retrieved chunks"""
+    context_parts = []
+    for chunk in retrieved_chunks:
+        text = chunk.get("text", "") if isinstance(chunk, dict) else str(chunk)
+        context_parts.append(text[:500])
+    return "\n\n---\n\n".join(context_parts)
 
 # =====================================================
 # EXTRACTIVE FALLBACK
