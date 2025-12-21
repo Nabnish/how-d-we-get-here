@@ -4,12 +4,8 @@ import pickle
 import hashlib
 import os
 import sys
-<<<<<<< HEAD
-from pdfimport import PubMedAPI
-
-=======
 import warnings
->>>>>>> 1234217331549fca723921f3108659fe08491817
+from pdfimport import PubMedAPI
 
 # =====================================================
 # UTF-8 SAFE CONSOLE (Windows)
@@ -255,12 +251,8 @@ Answer:
 # EXTRACTIVE FALLBACK
 # =====================================================
 
-<<<<<<< HEAD
-
-=======
 def extractive_answer(query: str, k=5):
     retrieved = search_index(query, k)
->>>>>>> 1234217331549fca723921f3108659fe08491817
 
     if not retrieved:
         return "No relevant information found."
